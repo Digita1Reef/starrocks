@@ -75,8 +75,15 @@ public class PulsarProgress extends RoutineLoadProgress {
         }
     }
 
+    // The Pulsar client creates new subscriptions at latest and resumes existing cursors by default.
+    // A task may be renewed before its first commit, so only an explicit ALTER should seek to latest.
+    private static long bootstrapPosition(long position) {
+        return position == PulsarRoutineLoadJob.POSITION_LATEST_VAL ? -1L : position;
+    }
+
     public void addPartitionToInitialPosition(Pair<String, Long> partitionToInitialPosition) {
-        this.partitionToInitialPosition.put(partitionToInitialPosition.first, partitionToInitialPosition.second);
+        this.partitionToInitialPosition.put(partitionToInitialPosition.first,
+                bootstrapPosition(partitionToInitialPosition.second));
     }
 
     public void modifyInitialPositions(List<Pair<String, Long>> partitionInitialPositions) {
@@ -94,7 +101,7 @@ public class PulsarProgress extends RoutineLoadProgress {
             currentPartitions.stream()
                     .filter(entry -> !partitionToInitialPosition.containsKey(entry))
                     .filter(entry -> !partitionToBacklogNum.containsKey(entry))
-                    .forEach(entry -> partitionToInitialPosition.put(entry, defaultInitialPosition));
+                    .forEach(entry -> partitionToInitialPosition.put(entry, bootstrapPosition(defaultInitialPosition)));
         }
     }
 

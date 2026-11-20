@@ -193,18 +193,13 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // divide pulsarPartitions into tasks
                 for (int i = 0; i < currentConcurrentTaskNum; i++) {
                     List<String> partitions = Lists.newArrayList();
-                    Map<String, Long> initialPositions = Maps.newHashMap();
                     for (int j = 0; j < currentPulsarPartitions.size(); j++) {
                         if (j % currentConcurrentTaskNum == i) {
                             String partition = currentPulsarPartitions.get(j);
                             partitions.add(partition);
-                            // initial position was set, need to be added into PulsarTaskInfo
-                            Long initialPosition = ((PulsarProgress) progress).getInitialPosition(partition);
-                            if (initialPosition != -1L) {
-                                initialPositions.put(partition, initialPosition);
-                            }
                         }
                     }
+                    Map<String, Long> initialPositions = ((PulsarProgress) progress).getPartitionToInitialPosition(partitions);
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
                     PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
