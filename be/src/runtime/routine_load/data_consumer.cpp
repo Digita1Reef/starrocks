@@ -47,6 +47,10 @@
 #include "util/stopwatch.hpp"
 #include "util/uid_util.h"
 
+#ifndef __APPLE__
+#include "runtime/routine_load/pulsar_consumer_status.h"
+#endif
+
 namespace starrocks {
 
 // init kafka consumer will only set common configs such as
@@ -533,9 +537,9 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     pulsar::Result result;
     result = _p_client->subscribe(partition, _subscription, _p_consumer);
     if (result != pulsar::ResultOk) {
-        LOG(WARNING) << "PAUSE: failed to create pulsar consumer: " << ctx->brief(true) << ", err: " << result;
-        return Status::InternalError("PAUSE: failed to create pulsar consumer: " +
-                                     std::string(pulsar::strResult(result)));
+        auto status = pulsar_assignment_error("failed to create pulsar consumer", result);
+        LOG(WARNING) << status << ", " << ctx->brief();
+        return status;
     }
 
     if (initial_position == InitialPosition::LATEST || initial_position == InitialPosition::EARLIEST) {
@@ -544,9 +548,9 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
                                                        : pulsar::MessageId::earliest();
         result = _p_consumer.seek(p_initial_position);
         if (result != pulsar::ResultOk) {
-            LOG(WARNING) << "PAUSE: failed to reset the subscription: " << ctx->brief(true) << ", err: " << result;
-            return Status::InternalError("PAUSE: failed to reset the subscription: " +
-                                         std::string(pulsar::strResult(result)));
+            auto status = pulsar_assignment_error("failed to reset the subscription", result);
+            LOG(WARNING) << status << ", " << ctx->brief();
+            return status;
         }
     }
 

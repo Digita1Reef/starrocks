@@ -23,9 +23,26 @@
 
 #ifndef __APPLE__
 #include "pulsar/MessageBuilder.h"
+#include "runtime/routine_load/pulsar_consumer_status.h"
 #endif
 
 namespace starrocks {
+
+#ifndef __APPLE__
+TEST(PulsarDataConsumerTest, brokerDisconnectRetriesButPermanentErrorsStillPause) {
+    for (auto result : {pulsar::ResultConnectError, pulsar::ResultReadError, pulsar::ResultNotConnected,
+                        pulsar::ResultDisconnected, pulsar::ResultTimeout, pulsar::ResultServiceUnitNotReady}) {
+        auto status = pulsar_assignment_error("subscribe", result);
+        EXPECT_TRUE(status.is_service_unavailable());
+        EXPECT_EQ(std::string::npos, status.message().find("PAUSE"));
+    }
+    for (auto result : {pulsar::ResultAuthenticationError, pulsar::ResultAuthorizationError,
+                        pulsar::ResultInvalidTopicName, pulsar::ResultConsumerBusy}) {
+        auto status = pulsar_assignment_error("subscribe", result);
+        EXPECT_EQ(0, status.message().find("PAUSE:"));
+    }
+}
+#endif
 
 class KafkaDataConsumerTest : public testing::Test {};
 
