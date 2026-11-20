@@ -32,13 +32,18 @@ namespace starrocks {
 TEST(PulsarDataConsumerTest, brokerDisconnectRetriesButPermanentErrorsStillPause) {
     for (auto result : {pulsar::ResultConnectError, pulsar::ResultReadError, pulsar::ResultNotConnected,
                         pulsar::ResultDisconnected, pulsar::ResultTimeout, pulsar::ResultServiceUnitNotReady}) {
-        auto status = pulsar_assignment_error("subscribe", result);
+        auto status = pulsar_assignment_error("subscribe", result, {});
         EXPECT_TRUE(status.is_service_unavailable());
         EXPECT_EQ(std::string::npos, status.message().find("PAUSE"));
+        EXPECT_TRUE(pulsar_assignment_error("subscribe", result, {{"new", -1}}).is_service_unavailable());
+        for (int64_t seek : {0, 1}) {
+            auto mixed = pulsar_assignment_error("subscribe", result, {{"new", -1}, {"reset", seek}});
+            EXPECT_EQ(0, mixed.message().find("PAUSE:"));
+        }
     }
     for (auto result : {pulsar::ResultAuthenticationError, pulsar::ResultAuthorizationError,
                         pulsar::ResultInvalidTopicName, pulsar::ResultConsumerBusy}) {
-        auto status = pulsar_assignment_error("subscribe", result);
+        auto status = pulsar_assignment_error("subscribe", result, {});
         EXPECT_EQ(0, status.message().find("PAUSE:"));
     }
 }

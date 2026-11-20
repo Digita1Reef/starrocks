@@ -537,7 +537,8 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     pulsar::Result result;
     result = _p_client->subscribe(partition, _subscription, _p_consumer);
     if (result != pulsar::ResultOk) {
-        auto status = pulsar_assignment_error("failed to create pulsar consumer", result);
+        auto status = pulsar_assignment_error("failed to create pulsar consumer", result,
+                                              ctx->pulsar_info->initial_positions);
         LOG(WARNING) << status << ", " << ctx->brief();
         return status;
     }
@@ -548,7 +549,8 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
                                                        : pulsar::MessageId::earliest();
         result = _p_consumer.seek(p_initial_position);
         if (result != pulsar::ResultOk) {
-            auto status = pulsar_assignment_error("failed to reset the subscription", result);
+            auto status = Status::InternalError("PAUSE: failed to reset the subscription: " +
+                                                std::string(pulsar::strResult(result)));
             LOG(WARNING) << status << ", " << ctx->brief();
             return status;
         }

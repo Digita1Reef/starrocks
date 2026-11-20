@@ -16,6 +16,9 @@
 
 #include <pulsar/Result.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
 
@@ -24,7 +27,8 @@
 namespace starrocks {
 
 // Routine load renews aborted tasks. The PAUSE marker is reserved for errors that need operator intervention.
-inline Status pulsar_assignment_error(std::string_view operation, pulsar::Result result) {
+inline Status pulsar_assignment_error(std::string_view operation, pulsar::Result result,
+                                      const std::map<std::string, int64_t>& initial_positions) {
     std::string message(operation);
     message.append(": ").append(pulsar::strResult(result));
     switch (result) {
@@ -34,10 +38,16 @@ inline Status pulsar_assignment_error(std::string_view operation, pulsar::Result
     case pulsar::ResultDisconnected:
     case pulsar::ResultTimeout:
     case pulsar::ResultServiceUnitNotReady:
-        return Status::ServiceUnavailable(message);
+        // A replacement task must not repeat an explicit seek on another partition it already assigned.
+        if (std::none_of(initial_positions.begin(), initial_positions.end(),
+                         [](const auto& entry) { return entry.second >= 0; })) {
+            return Status::ServiceUnavailable(message);
+        }
+        break;
     default:
-        return Status::InternalError("PAUSE: " + message);
+        break;
     }
+    return Status::InternalError("PAUSE: " + message);
 }
 
 } // namespace starrocks
