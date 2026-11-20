@@ -553,8 +553,11 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     LOG(INFO) << ss.str();
 
     // do subscribe
-    pulsar::Result result;
-    result = _p_client->subscribe(partition, _subscription, _p_consumer);
+    std::function<pulsar::Result()> subscribe = [&] {
+        return _p_client->subscribe(partition, _subscription, _p_consumer);
+    };
+    TEST_SYNC_POINT_CALLBACK("PulsarDataConsumer::subscribe", &subscribe);
+    pulsar::Result result = subscribe();
     if (result != pulsar::ResultOk) {
         auto status = pulsar_assignment_error("failed to create pulsar consumer", result,
                                               ctx->pulsar_info->initial_positions);

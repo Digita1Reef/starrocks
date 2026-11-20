@@ -117,6 +117,12 @@ RESUME ROUTINE LOAD FOR routine_wiki_edit_1;
 
 The updated properties take effect on subsequent tasks without restarting a BE. A cached consumer with different properties is not reused. Changing these timeouts does not change the subscription or its initial-position settings. Upgrade all FEs and BEs to a version supporting these properties before using them; older BEs ignore unsupported custom properties.
 
+### Consumer connection failures
+
+Routine Load retries a task after a broker connection, read, disconnect, timeout, or service-unavailable error when it can reuse the subscription cursor. A new subscription starting at `POSITION_LATEST` uses the broker's initial position. Tasks returning to that subscription keep its cursor even before their first committed batch. Check the job state, aborted-task statistics and `OtherMsg` when investigating persistent failures.
+
+If the task contains an explicit cursor reset, an assignment failure pauses the job so that a retry cannot repeat a seek on another partition. Invalid configuration, authentication and authorization errors also pause the job.
+
 ## Check a load job and task
 
 ### Check a load job
