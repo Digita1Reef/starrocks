@@ -40,7 +40,7 @@ protected:
         info.service_url = "pulsar://localhost:6650";
         info.topic = "persistent://public/default/recovery";
         info.subscription = "recovery-test";
-        _context = std::make_unique<StreamLoadContext>(nullptr);
+        _context = std::make_unique<StreamLoadContext>(ExecEnv::GetInstance());
         _context->pulsar_info = std::make_unique<PulsarLoadInfo>(info);
         _consumer = std::make_unique<PulsarDataConsumer>(_context.get());
         ASSERT_OK(_consumer->init(_context.get()));
@@ -123,7 +123,7 @@ protected:
         info.topic = "persistent://public/default/timeouts";
         info.subscription = "timeouts-test";
         info.properties = properties;
-        auto ctx = std::make_unique<StreamLoadContext>(nullptr);
+        auto ctx = std::make_unique<StreamLoadContext>(ExecEnv::GetInstance());
         ctx->load_src_type = TLoadSourceType::PULSAR;
         ctx->pulsar_info = std::make_unique<PulsarLoadInfo>(info);
         return ctx;

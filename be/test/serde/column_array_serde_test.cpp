@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include <string>
 #include <initializer_list>
+#include <string>
 #include <vector>
 
 #include "column/array_column.h"

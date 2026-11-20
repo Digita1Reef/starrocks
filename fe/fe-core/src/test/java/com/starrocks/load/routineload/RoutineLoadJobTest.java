@@ -249,7 +249,7 @@ public class RoutineLoadJobTest {
             long before = System.currentTimeMillis();
 
             job.writeLock();
-            job.afterAborted(transactionState, reason);
+            job.afterAborted(transactionState, true, reason);
 
             Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, job.getState());
             Assertions.assertEquals(TransactionStatus.ABORTED, task.getTxnStatus());
