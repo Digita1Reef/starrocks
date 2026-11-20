@@ -16,6 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+#include <initializer_list>
+#include <vector>
+
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -27,6 +31,7 @@
 #include "common/config.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "serde/binary_column_offsets.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "types/hll.h"
@@ -576,6 +581,47 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
         ASSERT_EQ("[1,2,3]", c2->debug_item(0));
         ASSERT_EQ("[4,5,6]", c2->debug_item(1));
     }
+}
+
+template <typename ColumnType>
+static void assert_well_formed_offsets_round_trip() {
+    auto c1 = ColumnType::create();
+    for (int i = 0; i < 300; ++i) {
+        std::string value = (i % 3 == 0) ? "" : std::string(1 + i % 7, 'a' + i % 26);
+        c1->append(Slice(value));
+    }
+    for (auto level = -1; level < 8; ++level) {
+        std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*c1, level));
+        const auto* end = buffer.data() + buffer.size();
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        auto c2 = ColumnType::create();
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+        ASSERT_EQ(c1->size(), c2->size());
+        for (size_t i = 0; i < c1->size(); i++) {
+            ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
+        }
+    }
+}
+
+PARALLEL_TEST(ColumnArraySerdeTest, binary_offset_validation) {
+    auto check = []<typename T>() {
+        auto validate = [](std::initializer_list<T> entries, size_t payload) {
+            Buffer<T> offsets(entries.begin(), entries.end());
+            return detail::check_binary_offsets(offsets, payload);
+        };
+        ASSERT_OK(validate({0}, 0));
+        ASSERT_OK(validate({0, 0, 2, 2}, 2));
+        ASSERT_TRUE(validate({}, 0).is_corruption());
+        ASSERT_TRUE(validate({1, 2}, 2).is_corruption());
+        ASSERT_TRUE(validate({0, 2}, 3).is_corruption());
+        ASSERT_TRUE(validate({0, 2, 1, 3}, 3).is_corruption());
+        ASSERT_OK(detail::check_offset_byte_count<T>(3 * sizeof(T)));
+        ASSERT_TRUE(detail::check_offset_byte_count<T>(sizeof(T) + 1).is_corruption());
+    };
+    check.template operator()<uint32_t>();
+    check.template operator()<uint64_t>();
+    assert_well_formed_offsets_round_trip<BinaryColumn>();
+    assert_well_formed_offsets_round_trip<LargeBinaryColumn>();
 }
 
 } // namespace starrocks::serde

@@ -35,6 +35,7 @@
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "serde/binary_column_offsets.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
 #include "types/variant_value.h"
@@ -325,14 +326,26 @@ public:
         } else {
             ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &offset_bytes_size));
         }
-        raw::make_room(&column->get_offset(), offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
-
+        // The bytes were already resized to the payload, so do not leave a rejected column half-built.
+        auto reject = [column](Status st) {
+            column->reset_column();
+            return st;
+        };
+        if (auto st = detail::check_offset_byte_count<T>(offset_bytes_size); !st.ok()) {
+            return reject(std::move(st));
+        }
+        Buffer<T> offsets;
+        raw::make_room(&offsets, offset_bytes_size / sizeof(T));
         if (EncodeContext::enable_encode_integer(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_i32 = sizeof(T) == 4;
-            ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, column->get_offset().data(), offset_bytes_size));
+            ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, offsets.data(), offset_bytes_size));
         } else {
-            ASSIGN_OR_RETURN(buff, read_raw(buff, end, column->get_offset().data(), offset_bytes_size));
+            ASSIGN_OR_RETURN(buff, read_raw(buff, end, offsets.data(), offset_bytes_size));
         }
+        if (auto st = detail::check_binary_offsets(offsets, bytes_size); !st.ok()) {
+            return reject(std::move(st));
+        }
+        column->get_offset() = std::move(offsets);
         return buff;
     }
 };
