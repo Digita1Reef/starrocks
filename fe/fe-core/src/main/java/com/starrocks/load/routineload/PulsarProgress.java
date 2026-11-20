@@ -93,6 +93,7 @@ public class PulsarProgress extends RoutineLoadProgress {
         if (defaultInitialPosition != null) {
             currentPartitions.stream()
                     .filter(entry -> !partitionToInitialPosition.containsKey(entry))
+                    .filter(entry -> !partitionToBacklogNum.containsKey(entry))
                     .forEach(entry -> partitionToInitialPosition.put(entry, defaultInitialPosition));
         }
     }
