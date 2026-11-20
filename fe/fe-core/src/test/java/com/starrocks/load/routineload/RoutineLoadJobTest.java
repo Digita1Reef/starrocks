@@ -80,7 +80,6 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import mockit.Verifications;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -206,10 +205,15 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testPulsarConnectionFailureRenewsTask(@Mocked RoutineLoadMgr routineLoadMgr,
-                                                     @Mocked RoutineLoadTaskScheduler scheduler,
-                                                     @Injectable TransactionState transactionState)
+    public void testPulsarConnectionFailureRenewsTask(@Injectable TransactionState transactionState)
             throws StarRocksException {
+        List<RoutineLoadTaskInfo> scheduled = Lists.newArrayList();
+        new MockUp<RoutineLoadTaskScheduler>() {
+            @Mock
+            public void addTaskInQueue(RoutineLoadTaskInfo task) {
+                scheduled.add(task);
+            }
+        };
         TRLTaskTxnCommitAttachment thriftAttachment = new TRLTaskTxnCommitAttachment();
         thriftAttachment.setLoadSourceType(TLoadSourceType.PULSAR);
         thriftAttachment.setPulsarRLTaskProgress(new TPulsarRLTaskProgress(Map.of()));
@@ -264,12 +268,8 @@ public class RoutineLoadJobTest {
             Assertions.assertSame(progress, job.progress);
             Assertions.assertEquals(List.of(100L, 200L), progress.getBacklogNums().stream().sorted().toList());
             Assertions.assertTrue(job.getOtherMsg().contains(reason));
-            new Verifications() {
-                {
-                    scheduler.addTaskInQueue(renewed);
-                    times = 1;
-                }
-            };
+            Assertions.assertEquals(List.of(renewed), scheduled);
+            scheduled.clear();
         }
     }
 
