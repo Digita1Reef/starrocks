@@ -223,10 +223,10 @@ LIBRDKAFKA_SOURCE=librdkafka-2.11.0
 LIBRDKAFKA_MD5SUM="bc611d0340e269abaa8886d42ff9c558"
 
 # pulsar
-PULSAR_DOWNLOAD="https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz"
-PULSAR_NAME=pulsar-client-3.3.0.tar.gz
-PULSAR_SOURCE=pulsar-client-cpp-3.3.0
-PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
+PULSAR_DOWNLOAD="https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v4.1.0.tar.gz"
+PULSAR_NAME=pulsar-client-4.1.0.tar.gz
+PULSAR_SOURCE=pulsar-client-cpp-4.1.0
+PULSAR_MD5SUM="ba7f27248f58313d09b2b01c511f5248"
 
 # zstd
 ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.7.tar.gz"
