@@ -17,7 +17,6 @@ package com.starrocks.load.routineload;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +45,8 @@ public class PulsarCursorContinuityTest {
                     progress.unprotectUpdate(List.of("existing", "new"), initialPosition);
                     assertTrue(progress.getInitialPosition("existing") == -1L,
                             "committed partition must not seek after leader replay");
-                    assertTrue(progress.getInitialPosition("new") == initialPosition, "new partition honors default after replay");
+                    assertTrue(progress.getInitialPosition("new") == initialPosition,
+                            "new partition honors default after replay");
                     assertTrue(progress.getPartitionToInitialPosition(List.of("existing")).isEmpty(),
                             "renewed task carries no seek marker for committed partition");
                     assertTrue(progress.getBacklogNums().equals(List.of(backlog)), "replay preserves committed progress");
