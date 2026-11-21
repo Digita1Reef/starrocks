@@ -28,6 +28,7 @@
 #ifndef __APPLE__
 #include "pulsar/MessageBuilder.h"
 #include "runtime/routine_load/pulsar_consumer_status.h"
+#include "runtime/routine_load/routine_load_task_executor.h"
 #endif
 
 namespace starrocks {
@@ -45,7 +46,9 @@ protected:
         _consumer = std::make_unique<PulsarDataConsumer>(_context.get());
         ASSERT_OK(_consumer->init(_context.get()));
         SyncPoint::GetInstance()->SetCallBack("PulsarDataConsumer::subscribe", [&](void* arg) {
-            *static_cast<std::function<pulsar::Result()>*>(arg) = [&] { return _result; };
+            *static_cast<std::function<pulsar::Result()>*>(arg) = [&] {
+                return ++_subscribe_calls <= _busy_responses ? pulsar::ResultConsumerBusy : _result;
+            };
         });
         SyncPoint::GetInstance()->EnableProcessing();
     }
@@ -58,9 +61,44 @@ protected:
     Status assign() { return _consumer->assign_partition(_context->pulsar_info->topic, _context.get()); }
 
     pulsar::Result _result = pulsar::ResultOk;
+    int _subscribe_calls = 0;
+    int _busy_responses = 0;
     std::unique_ptr<StreamLoadContext> _context;
     std::unique_ptr<PulsarDataConsumer> _consumer;
 };
+
+TEST_F(PulsarConsumerCreationTest, exclusive_handoff_retries_subscribe_in_place) {
+    _busy_responses = 2;
+    _context->pulsar_info->initial_positions = {{"another-partition", PulsarDataConsumer::EARLIEST}};
+    ASSERT_OK(assign());
+    EXPECT_EQ(3, _subscribe_calls);
+}
+
+TEST_F(PulsarConsumerCreationTest, persistent_exclusive_owner_still_pauses) {
+    _result = pulsar::ResultConsumerBusy;
+    auto status = assign();
+    ASSERT_FALSE(status.ok());
+    EXPECT_EQ(0, status.message().find("PAUSE:"));
+    EXPECT_EQ(4, _subscribe_calls);
+}
+
+TEST_F(PulsarConsumerCreationTest, backlog_stats_error_preserves_output_and_stops_probing) {
+    RoutineLoadTaskExecutor executor(ExecEnv::GetInstance());
+    PPulsarBacklogProxyRequest request;
+    auto* info = request.mutable_pulsar_info();
+    info->set_service_url(_context->pulsar_info->service_url);
+    info->set_topic(_context->pulsar_info->topic);
+    info->set_subscription(_context->pulsar_info->subscription);
+    request.add_partitions(info->topic() + "-partition-0");
+    request.add_partitions(info->topic() + "-partition-1");
+    std::vector<int64_t> backlogs = {42};
+    // The subscribe stub succeeds without a broker handle, so the statistics call fails.
+    auto status = executor.get_pulsar_partition_backlog(request, &backlogs);
+    ASSERT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.message().find("Failed to get broker consumer stats"));
+    EXPECT_EQ(std::vector<int64_t>({42}), backlogs);
+    EXPECT_EQ(1, _subscribe_calls);
+}
 
 TEST_F(PulsarConsumerCreationTest, transient_failure_allows_task_retry) {
     for (auto result : {pulsar::ResultConnectError, pulsar::ResultTimeout}) {

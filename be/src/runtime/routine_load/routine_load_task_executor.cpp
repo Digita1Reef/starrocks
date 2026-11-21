@@ -237,30 +237,22 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_info);
     ctx.need_rollback = false;
 
-    // convert pb repeated value to vector
-    std::vector<std::string> partitions;
-    partitions.reserve(request.partitions().size());
-    for (const auto& p : request.partitions()) {
-        partitions.push_back(p);
-    }
-
-    backlog_num->reserve(partitions.size());
-
-    Status st;
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
-    for (const auto& p : partitions) {
+    auto pulsar_consumer = std::static_pointer_cast<PulsarDataConsumer>(consumer);
+    std::vector<int64_t> backlogs;
+    backlogs.reserve(request.partitions_size());
+    for (const auto& partition : request.partitions()) {
+        RETURN_IF_ERROR(pulsar_consumer->assign_partition(partition, &ctx));
         int64_t backlog = 0;
-        RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(consumer)->assign_partition(p, &ctx));
-        st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog);
-        std::static_pointer_cast<PulsarDataConsumer>(consumer).reset();
-        backlog_num->push_back(backlog);
+        const auto stats_status = pulsar_consumer->get_partition_backlog(&backlog);
+        const auto close_status = pulsar_consumer->reset();
+        RETURN_IF_ERROR(stats_status);
+        RETURN_IF_ERROR(close_status);
+        backlogs.push_back(backlog);
     }
-
-    if (st.ok()) {
-        _data_consumer_pool.return_consumer(consumer);
-    }
-
+    _data_consumer_pool.return_consumer(consumer);
+    backlog_num->insert(backlog_num->end(), backlogs.begin(), backlogs.end());
     return Status::OK();
 }
 #endif

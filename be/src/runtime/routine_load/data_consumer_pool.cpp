@@ -135,10 +135,13 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
 }
 
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {
+    const auto status = consumer->reset();
+    if (!status.ok()) {
+        LOG(WARNING) << "Discarding consumer " << consumer->id() << " after reset failed: " << status;
+        return;
+    }
+
     std::unique_lock<std::mutex> l(_lock);
-
-    (void)consumer->reset();
-
     if (_pool.size() == _max_pool_size) {
         VLOG(3) << "data consumer pool is full: " << _pool.size() << "-" << _max_pool_size
                 << ", discard the returned consumer: " << consumer->id();

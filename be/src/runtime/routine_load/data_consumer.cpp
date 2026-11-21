@@ -35,9 +35,11 @@
 #include "runtime/routine_load/data_consumer.h"
 
 #include <charconv>
+#include <chrono>
 #include <functional>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "common/status.h"
@@ -558,6 +560,15 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
     };
     TEST_SYNC_POINT_CALLBACK("PulsarDataConsumer::subscribe", &subscribe);
     pulsar::Result result = subscribe();
+    // A concurrent backlog probe may be closing its exclusive consumer on another BE.
+    for (int delay_ms : {50, 100, 200}) {
+        if (result != pulsar::ResultConsumerBusy) {
+            break;
+        }
+        VLOG(1) << "Retrying busy Pulsar subscription " << _subscription << " on " << partition;
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        result = subscribe();
+    }
     if (result != pulsar::ResultOk) {
         auto status = pulsar_assignment_error("failed to create pulsar consumer", result,
                                               ctx->pulsar_info->initial_positions);
@@ -696,7 +707,12 @@ Status PulsarDataConsumer::cancel(StreamLoadContext* ctx) {
 Status PulsarDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
-    _p_consumer.close();
+    const auto result = _p_consumer.close();
+    if (result != pulsar::ResultOk && result != pulsar::ResultAlreadyClosed &&
+        result != pulsar::ResultConsumerNotInitialized) {
+        return Status::InternalError("Failed to close Pulsar consumer: " + std::string(pulsar::strResult(result)));
+    }
+    _p_consumer = pulsar::Consumer();
     return Status::OK();
 }
 
